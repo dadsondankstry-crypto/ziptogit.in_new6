@@ -1,0 +1,32 @@
+PERSONAGEM 3D — ANDROID OFFLINE (protótipo inicial)
+
+O que contém
+- App Android WebView sem permissão de internet.
+- HTML inteiramente autocontido: WebGL puro, sem CDN e sem biblioteca externa.
+- Manequim 3D com formas arredondadas (não é fotorrealista nem articulado).
+- Ajustes de altura e proporção de cabeça.
+- Exportação de arquivo GLB 2.0 com geometria e materiais.
+- Projeto Gradle e workflow GitHub Actions para gerar APK DEBUG.
+
+COMO GERAR APK PELO CELULAR VIA GITHUB ACTIONS
+1. Tenha uma conta no GitHub (github.com).
+2. Crie um repositório novo (recomenda-se privado).
+3. Envie o CONTEÚDO desta pasta para a raiz do repositório, preservando a estrutura, incluindo .github/workflows/android.yml.
+   Nota: carregar o ZIP como um único arquivo NÃO instala o projeto; é necessário extrair e enviar os arquivos.
+4. Abra Actions > Gerar APK Android > Run workflow, caso não tenha iniciado automaticamente ao enviar arquivos.
+5. Abra a execução > Artifacts > Personagem3D-APK e baixe o ZIP.
+6. Extraia o ZIP: dentro estará app-debug.apk.
+7. Instale o APK no Android, autorizando a instalação dessa origem se necessário.
+8. Teste o app com MODO AVIÃO ligado: a visualização e a exportação funcionam sem rede.
+
+ALTERNATIVA LOCAL
+Abrir a pasta do projeto no AndroidIDE, instalar as ferramentas Android exigidas e compilar assembleDebug.
+
+Para visualizar no navegador ANTES de gerar APK: abra app/src/main/assets/index.html.
+
+AVISOS
+- Este projeto não é APK pronto: o APK precisa ser compilado no AndroidIDE ou no GitHub Actions.
+- A compilação via GitHub exige internet e conta GitHub. Depois de instalado, o aplicativo funciona offline.
+- APK gerado é de TESTE (debug), não versão de publicação na Play Store.
+- Futuras atualizações podem exigir preservação da chave de assinatura para instalar por cima.
+- WebGL depende do suporte gráfico e do Android System WebView do aparelho.

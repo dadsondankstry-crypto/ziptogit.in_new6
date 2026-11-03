@@ -1,0 +1,70 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Personagem 3D Offline</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#101824;color:#e9eff7;font:15px system-ui,Roboto,sans-serif}header{padding:13px 16px;background:#172335;border-bottom:1px solid #304358}header strong{font-size:17px}header small{display:block;color:#a8b8cc;margin-top:3px}#view{display:block;width:100%;height:56vh;min-height:330px;touch-action:none;background:radial-gradient(ellipse at center,#31435b 0%,#111927 75%)}main{padding:14px;max-width:800px;margin:auto}.row{display:flex;justify-content:space-between;gap:12px;align-items:center}label{font-weight:600}input[type=range]{width:100%;accent-color:#50c8b1;margin:12px 0 17px}button{border:0;border-radius:10px;padding:13px 16px;background:#50c8b1;color:#061e1a;font-weight:800;font-size:15px;width:100%}.hint{font-size:12px;line-height:1.5;color:#b4c2d5;margin-top:12px}#status{font-size:12px;color:#b4efda;min-height:18px;margin-top:9px}.badge{display:inline-block;padding:3px 8px;border-radius:6px;background:#2a3c50;color:#b6e9df;font-size:12px}
+</style></head><body><header><strong>Personagem 3D <span class="badge">OFFLINE</span></strong><small>Protótipo anatômico • exportação GLB</small></header>
+<canvas id="view"></canvas><main><div class="row"><label for="altura">Altura do personagem</label><b id="heightVal">175 cm</b></div><input id="altura" type="range" min="145" max="205" step="1" value="175">
+<div class="row"><label for="cabeca">Proporção da cabeça</label><b id="headVal">7,5 cabeças</b></div><input id="cabeca" type="range" min="6.5" max="8.5" step="0.1" value="7.5">
+<button id="export">EXPORTAR MODELO .GLB</button><div id="status">Arraste para girar. Use dois dedos para aproximar.</div><p class="hint">Versão inicial: manequim 3D arredondado com dimensões paramétricas e modelo GLB real. Ainda não é um humano fotorrealista nem possui esqueleto de animação. Tudo está embutido neste HTML: nenhuma biblioteca ou internet é necessária.</p></main>
+<script>
+'use strict';
+const canvas=document.getElementById('view'), status=document.getElementById('status');
+const gl=canvas.getContext('webgl',{antialias:true,alpha:false,preserveDrawingBuffer:false});
+if(!gl){status.textContent='Este Android/WebView não disponibilizou WebGL.';throw Error('Sem WebGL');}
+const vs=`attribute vec3 aPos; attribute vec3 aNormal; uniform mat4 uMVP; uniform mat4 uModel; varying vec3 vNormal; varying vec3 vPos; void main(){vNormal=mat3(uModel)*aNormal; vPos=vec3(uModel*vec4(aPos,1.)); gl_Position=uMVP*vec4(aPos,1.);}`;
+const fs=`precision mediump float; varying vec3 vNormal; varying vec3 vPos; uniform vec3 uColor; void main(){vec3 n=normalize(vNormal); vec3 light=normalize(vec3(-0.55,0.9,0.7)); float d=max(dot(n,light),0.0); float rim=pow(1.-abs(n.z),3.)*.13; vec3 c=uColor*(.43+.57*d)+vec3(rim);gl_FragColor=vec4(pow(c,vec3(.92)),1.);}`;
+function shader(type,code){const s=gl.createShader(type);gl.shaderSource(s,code);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;}
+const p=gl.createProgram();gl.attachShader(p,shader(gl.VERTEX_SHADER,vs));gl.attachShader(p,shader(gl.FRAGMENT_SHADER,fs));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));gl.useProgram(p);
+const loc={pos:gl.getAttribLocation(p,'aPos'),normal:gl.getAttribLocation(p,'aNormal'),mvp:gl.getUniformLocation(p,'uMVP'),model:gl.getUniformLocation(p,'uModel'),color:gl.getUniformLocation(p,'uColor')};
+const posBuf=gl.createBuffer(),normBuf=gl.createBuffer(),indexBuf=gl.createBuffer();gl.enableVertexAttribArray(loc.pos);gl.enableVertexAttribArray(loc.normal);gl.enable(gl.DEPTH_TEST);
+let parts=[],positions=[],normals=[],indices=[],angle=0.27,tilt=0.05,zoom=3.35;
+const COLORS={skin:[0.82,0.58,0.44],torso:[0.67,0.79,0.86],pelvis:[0.29,0.55,0.69],joint:[0.74,0.65,0.57]};
+function addEllipsoid(name,cx,cy,cz,rx,ry,rz,color){
+ const v0=positions.length/3,i0=indices.length,R=22,S=30;
+ for(let iy=0;iy<=R;iy++){const t=Math.PI*iy/R,st=Math.sin(t),ct=Math.cos(t);for(let ix=0;ix<=S;ix++){const a=2*Math.PI*ix/S,s=Math.sin(a),c=Math.cos(a); const x=st*c,y=ct,z=st*s;positions.push(cx+rx*x,cy+ry*y,cz+rz*z);const nx=x/rx,ny=y/ry,nz=z/rz,L=Math.hypot(nx,ny,nz);normals.push(nx/L,ny/L,nz/L);}}
+ for(let iy=0;iy<R;iy++)for(let ix=0;ix<S;ix++){const a=v0+iy*(S+1)+ix,b=a+S+1;indices.push(a,b,a+1,b,b+1,a+1);}
+ parts.push({name,color,first:i0,count:indices.length-i0});
+}
+function rebuild(){positions=[];normals=[];indices=[];parts=[];
+ const height=+document.getElementById('altura').value/100,H=height/1.75,headRatio=+document.getElementById('cabeca').value;
+ document.getElementById('heightVal').textContent=Math.round(height*100)+' cm';document.getElementById('headVal').textContent=headRatio.toFixed(1).replace('.',',')+' cabeças';
+ const hy=height/headRatio,centerHead=height-hy/2,rxHead=hy*.35,rzHead=hy*.38;
+ function E(n,x,y,z,rx,ry,rz,c){addEllipsoid(n,x*H,y*H,z*H,rx*H,ry*H,rz*H,c);}
+ E('pe_esquerdo',-.105,.063,.085,.067,.06,.144,'joint');E('pe_direito',.105,.063,.085,.067,.06,.144,'joint');
+ for(const sign of [-1,1]){const x=sign*.105,s=sign<0?'esquerda':'direita';E('panturrilha_'+s,x,.287,0,.074,.215,.078,'skin');E('joelho_'+s,x,.497,0,.082,.069,.087,'joint');E('coxa_'+s,x,.678,0,.095,.195,.107,'skin');}
+ E('pelve',0,.935,0,.205,.14,.115,'pelvis');E('abdomen',0,1.135,0,.171,.155,.106,'torso');E('torax',0,1.351,-.005,.223,.159,.133,'torso');
+ for(const sign of [-1,1]){const x=sign*.257,s=sign<0?'esquerdo':'direito';E('ombro_'+s,sign*.235,1.421,0,.102,.097,.099,'torso');E('braco_'+s,x,1.245,0,.079,.161,.082,'skin');E('cotovelo_'+s,x,1.092,0,.072,.071,.075,'joint');E('antebraco_'+s,x,0.974,0,.064,.139,.071,'skin');E('mao_'+s,x,.798,0,.061,.099,.037,'skin');}
+ E('pescoco',0,1.512,0,.066,.077,.064,'skin');
+ addEllipsoid('cabeca',0,centerHead,0,rxHead,hy*.5,rzHead,'skin');
+ addEllipsoid('nariz',0,centerHead-.012*H,rzHead+.010*H,.018*H,.033*H,.029*H,'skin');
+ for(const sign of [-1,1])addEllipsoid('orelha',sign*rxHead,centerHead-.01*H,0,.017*H,.036*H,.023*H,'skin');
+ if(positions.length/3>65535)throw Error('Malha excede limite');
+ gl.bindBuffer(gl.ARRAY_BUFFER,posBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(positions),gl.STATIC_DRAW);
+ gl.bindBuffer(gl.ARRAY_BUFFER,normBuf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(normals),gl.STATIC_DRAW);
+ gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuf);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(indices),gl.STATIC_DRAW);
+}
+function mul(a,b){let o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)for(let k=0;k<4;k++)o[c*4+r]+=a[k*4+r]*b[c*4+k];return o;}
+function perspective(fov,aspect,near,far){let f=1/Math.tan(fov/2),o=new Float32Array(16);o[0]=f/aspect;o[5]=f;o[10]=(far+near)/(near-far);o[11]=-1;o[14]=2*far*near/(near-far);return o;}
+function rotation(ax,ay){let cx=Math.cos(ax),sx=Math.sin(ax),cy=Math.cos(ay),sy=Math.sin(ay);return new Float32Array([cy,0,-sy,0,sy*sx,cx,cy*sx,0,sy*cx,-sx,cy*cx,0,0,0,0,1]);}
+function translate(x,y,z){let m=new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1]);return m;}
+function draw(){const dpr=Math.min(devicePixelRatio||1,2),w=Math.max(1,Math.round(canvas.clientWidth*dpr)),h=Math.max(1,Math.round(canvas.clientHeight*dpr));if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}gl.viewport(0,0,w,h);gl.clearColor(.065,.096,.149,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+ const height=+document.getElementById('altura').value/100;const model=rotation(tilt,angle);const view=translate(0,-height*.51,-zoom);const mvp=mul(perspective(.76,w/h,.1,80),mul(view,model));gl.uniformMatrix4fv(loc.mvp,false,mvp);gl.uniformMatrix4fv(loc.model,false,model);
+ gl.bindBuffer(gl.ARRAY_BUFFER,posBuf);gl.vertexAttribPointer(loc.pos,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ARRAY_BUFFER,normBuf);gl.vertexAttribPointer(loc.normal,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuf);
+ for(const part of parts){gl.uniform3fv(loc.color,COLORS[part.color]);gl.drawElements(gl.TRIANGLES,part.count,gl.UNSIGNED_SHORT,part.first*2);}requestAnimationFrame(draw);}
+let touches=new Map(),lastDist=0;
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);touches.set(e.pointerId,[e.clientX,e.clientY]);});
+canvas.addEventListener('pointermove',e=>{if(!touches.has(e.pointerId))return;const old=touches.get(e.pointerId);touches.set(e.pointerId,[e.clientX,e.clientY]);if(touches.size===1){angle+=(e.clientX-old[0])*.009;tilt=Math.max(-.45,Math.min(.45,tilt+(e.clientY-old[1])*.004));}else if(touches.size===2){const t=[...touches.values()],d=Math.hypot(t[0][0]-t[1][0],t[0][1]-t[1][1]);if(lastDist)zoom=Math.max(1.6,Math.min(7,zoom*lastDist/d));lastDist=d;}});
+function end(e){touches.delete(e.pointerId);lastDist=0;}canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);canvas.addEventListener('wheel',e=>{zoom=Math.max(1.6,Math.min(7,zoom+e.deltaY*.003));e.preventDefault();},{passive:false});
+for(const id of ['altura','cabeca'])document.getElementById(id).addEventListener('input',rebuild);
+// Exportador GLB 2.0 local: posições/normais/índices e materiais PBR. Nenhum acesso à rede.
+function glbBytes(){const encoder=new TextEncoder(),V=positions.length/3,vert=new Float32Array(positions),norm=new Float32Array(normals);let chunks=[],views=[],accessors=[],offset=0;
+ function add(array,target,componentType,type,count,min,max){const b=new Uint8Array(array.buffer,array.byteOffset,array.byteLength),at=offset;chunks.push({at,bytes:b});offset+=b.length;while(offset%4)offset++;const view=views.length;views.push({buffer:0,byteOffset:at,byteLength:b.length,target});const a={bufferView:view,componentType,count,type};if(min)a.min=min;if(max)a.max=max;accessors.push(a);return accessors.length-1;}
+ const boundsMin=[Infinity,Infinity,Infinity],boundsMax=[-Infinity,-Infinity,-Infinity];for(let i=0;i<vert.length;i+=3)for(let k=0;k<3;k++){boundsMin[k]=Math.min(boundsMin[k],vert[i+k]);boundsMax[k]=Math.max(boundsMax[k],vert[i+k]);}
+ const pa=add(vert,34962,5126,'VEC3',V,boundsMin,boundsMax),na=add(norm,34962,5126,'VEC3',V);
+ const materials=Object.keys(COLORS).map(k=>({name:k,pbrMetallicRoughness:{baseColorFactor:[...COLORS[k],1],metallicFactor:0,roughnessFactor:.88},doubleSided:true})),materialKeys=Object.keys(COLORS);
+ const primitives=parts.map(part=>{const a=new Uint16Array(indices.slice(part.first,part.first+part.count));const ia=add(a,34963,5123,'SCALAR',a.length);return {attributes:{POSITION:pa,NORMAL:na},indices:ia,material:materialKeys.indexOf(part.color),mode:4,extras:{parte:part.name}};});
+ const root={asset:{version:'2.0',generator:'Personagem3D Offline'},scene:0,scenes:[{nodes:[0]}],nodes:[{name:'Humano',mesh:0}],meshes:[{name:'Corpo_175cm',primitives}],materials,buffers:[{byteLength:offset}],bufferViews:views,accessors};
+ let json=encoder.encode(JSON.stringify(root)),jlen=(json.length+3)&~3,blen=(offset+3)&~3,total=12+8+jlen+8+blen,buf=new ArrayBuffer(total),dv=new DataView(buf),u=new Uint8Array(buf);dv.setUint32(0,0x46546c67,true);dv.setUint32(4,2,true);dv.setUint32(8,total,true);dv.setUint32(12,jlen,true);dv.setUint32(16,0x4e4f534a,true);u.fill(0x20,20,20+jlen);u.set(json,20);let bo=20+jlen;dv.setUint32(bo,blen,true);dv.setUint32(bo+4,0x004e4942,true);for(const ch of chunks)u.set(ch.bytes,bo+8+ch.at);return u;
+}
+document.getElementById('export').addEventListener('click',()=>{try{status.textContent='Preparando modelo GLB…';const bytes=glbBytes();if(window.AndroidBridge&&window.AndroidBridge.salvarGLB){let s='',unit=8192;for(let i=0;i<bytes.length;i+=unit)s+=String.fromCharCode(...bytes.subarray(i,i+unit));window.AndroidBridge.salvarGLB(btoa(s));status.textContent='Escolha a pasta para salvar o GLB.';}else{const blob=new Blob([bytes],{type:'model/gltf-binary'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='personagem-175cm.glb';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);status.textContent='Download GLB solicitado.';}}catch(e){status.textContent='Falha na exportação: '+e.message;}});
+rebuild();draw();
+</script></body></html>
